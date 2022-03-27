@@ -1,0 +1,666 @@
+From 42eb592ff4cff04bd01e8a0ab135f8b34bafd75b Mon Sep 17 00:00:00 2001
+From: LibXZR <i@xzr.moe>
+Date: Sat, 26 Mar 2022 15:48:52 +0000
+Subject: [PATCH] Introduce Memory info in Recent Overview to Android 11
+ Quickstep * yeah it can be applied on a11 launcher3 quickstep * Kang from
+ https://github.com/Project-Kaleidoscope/android_packages_apps_Launcher3/commit/014a292f2618e5c3027e6544ec3a555142584a02#
+ Co-authored-by: TH779 <i@779.moe>
+
+Change-Id: I4d8d5fb322a14dd3298c6be12147230cbd81650a
+---
+ .../res/layout/fallback_recents_activity.xml  |   3 +
+ .../res/layout/overview_panel.xml             |   3 +
+ .../RecentsViewStateController.java           |   5 +
+ .../states/BackgroundAppState.java            |   2 +-
+ .../states/OverviewModalTaskState.java        |   2 +-
+ .../uioverrides/states/OverviewState.java     |   6 +-
+ .../android/quickstep/RecentsActivity.java    |  10 +-
+ .../FallbackRecentsStateController.java       |   3 +
+ .../fallback/FallbackRecentsView.java         |   5 +-
+ .../quickstep/fallback/RecentsState.java      |  12 +-
+ .../quickstep/views/LauncherRecentsView.java  |   4 +-
+ .../android/quickstep/views/MemInfoView.java  | 154 ++++++++++++++++++
+ .../android/quickstep/views/RecentsView.java  |   7 +-
+ quickstep/res/layout/meminfo.xml              |   6 +
+ .../res/layout/overview_actions_container.xml |   2 +-
+ quickstep/res/values/dimens.xml               |   4 +
+ .../launcher3/BaseQuickstepLauncher.java      |  15 +-
+ .../BaseRecentsViewStateController.java       |   4 +
+ res/values-zh-rCN/lineage_strings.xml         |   2 +
+ res/values/lineage_strings.xml                |   4 +
+ src/com/android/launcher3/DeviceProfile.java  |   9 +
+ src/com/android/launcher3/LauncherState.java  |   2 +
+ 22 files changed, 249 insertions(+), 15 deletions(-)
+ create mode 100644 quickstep/recents_ui_overrides/src/com/android/quickstep/views/MemInfoView.java
+ create mode 100644 quickstep/res/layout/meminfo.xml
+
+diff --git a/quickstep/recents_ui_overrides/res/layout/fallback_recents_activity.xml b/quickstep/recents_ui_overrides/res/layout/fallback_recents_activity.xml
+index cd64a94ba..6d146c130 100644
+--- a/quickstep/recents_ui_overrides/res/layout/fallback_recents_activity.xml
++++ b/quickstep/recents_ui_overrides/res/layout/fallback_recents_activity.xml
+@@ -34,6 +34,9 @@
+             android:outlineProvider="none"
+             android:theme="@style/HomeScreenElementTheme" />
+ 
++        <include
++            layout="@layout/meminfo" />
++
+         <include
+             android:id="@+id/overview_actions_view"
+             layout="@layout/overview_actions_container" />
+diff --git a/quickstep/recents_ui_overrides/res/layout/overview_panel.xml b/quickstep/recents_ui_overrides/res/layout/overview_panel.xml
+index fe57e9b3d..1b73cd854 100644
+--- a/quickstep/recents_ui_overrides/res/layout/overview_panel.xml
++++ b/quickstep/recents_ui_overrides/res/layout/overview_panel.xml
+@@ -25,6 +25,9 @@
+         android:theme="@style/HomeScreenElementTheme"
+         android:visibility="invisible" />
+ 
++    <include
++            layout="@layout/meminfo" />
++
+     <include
+         android:id="@+id/overview_actions_view"
+         layout="@layout/overview_actions_container" />
+diff --git a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/RecentsViewStateController.java b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/RecentsViewStateController.java
+index bc47c5a00..16122923f 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/RecentsViewStateController.java
++++ b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/RecentsViewStateController.java
+@@ -16,6 +16,7 @@
+ package com.android.launcher3.uioverrides;
+ 
+ import static com.android.launcher3.LauncherState.OVERVIEW_BUTTONS;
++import static com.android.launcher3.LauncherState.MEMINFO;
+ import static com.android.launcher3.anim.Interpolators.LINEAR;
+ import static com.android.launcher3.states.StateAnimationConfig.ANIM_OVERVIEW_ACTIONS_FADE;
+ import static com.android.quickstep.views.RecentsView.CONTENT_ALPHA;
+@@ -35,6 +36,7 @@ import com.android.launcher3.anim.PendingAnimation;
+ import com.android.launcher3.anim.PropertySetter;
+ import com.android.launcher3.states.StateAnimationConfig;
+ import com.android.launcher3.util.MultiValueAlpha;
++import com.android.quickstep.views.MemInfoView;
+ import com.android.quickstep.views.LauncherRecentsView;
+ import com.android.quickstep.views.RecentsView;
+ 
+@@ -86,6 +88,9 @@ public final class RecentsViewStateController extends
+         propertySetter.setFloat(mLauncher.getActionsView().getVisibilityAlpha(),
+                 MultiValueAlpha.VALUE, buttonAlpha, config.getInterpolator(
+                         ANIM_OVERVIEW_ACTIONS_FADE, LINEAR));
++        float memInfoAlpha = (state.getVisibleElements(mLauncher) & MEMINFO) != 0 ? 1 : 0;
++        propertySetter.setFloat(mLauncher.getMemInfoView(), MemInfoView.STATE_CTRL_ALPHA,
++                memInfoAlpha, LINEAR);
+     }
+ 
+     @Override
+diff --git a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/BackgroundAppState.java b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/BackgroundAppState.java
+index 8ff05f2aa..2fb6f3e5e 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/BackgroundAppState.java
++++ b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/BackgroundAppState.java
+@@ -68,7 +68,7 @@ public class BackgroundAppState extends OverviewState {
+     @Override
+     public int getVisibleElements(Launcher launcher) {
+         return super.getVisibleElements(launcher)
+-                & ~OVERVIEW_BUTTONS & ~VERTICAL_SWIPE_INDICATOR;
++                & ~OVERVIEW_BUTTONS & ~VERTICAL_SWIPE_INDICATOR & ~MEMINFO;
+     }
+ 
+     @Override
+diff --git a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewModalTaskState.java b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewModalTaskState.java
+index fc0dcd511..1a2dc605d 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewModalTaskState.java
++++ b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewModalTaskState.java
+@@ -44,7 +44,7 @@ public class OverviewModalTaskState extends OverviewState {
+ 
+     @Override
+     public int getVisibleElements(Launcher launcher) {
+-        return OVERVIEW_BUTTONS;
++        return OVERVIEW_BUTTONS | MEMINFO;
+     }
+ 
+     @Override
+diff --git a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewState.java b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewState.java
+index d174bfd2d..d4f146e02 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewState.java
++++ b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewState.java
+@@ -131,14 +131,14 @@ public class OverviewState extends LauncherState {
+         RecentsView recentsView = launcher.getOverviewPanel();
+         if (ENABLE_OVERVIEW_ACTIONS.get() && removeShelfFromOverview(launcher) ||
+                 hideShelfInTwoButtonLandscape(launcher, recentsView.getPagedOrientationHandler())) {
+-            return OVERVIEW_BUTTONS;
++            return OVERVIEW_BUTTONS | MEMINFO;
+         } else if (launcher.getDeviceProfile().isVerticalBarLayout()) {
+-            return VERTICAL_SWIPE_INDICATOR | OVERVIEW_BUTTONS;
++            return VERTICAL_SWIPE_INDICATOR | OVERVIEW_BUTTONS | MEMINFO;
+         } else {
+             boolean hasAllAppsHeaderExtra = launcher.getAppsView() != null
+                     && launcher.getAppsView().getFloatingHeaderView().hasVisibleContent();
+             return HOTSEAT_SEARCH_BOX | VERTICAL_SWIPE_INDICATOR | OVERVIEW_BUTTONS
+-                    | (hasAllAppsHeaderExtra ? ALL_APPS_HEADER_EXTRA : HOTSEAT_ICONS);
++                    | (hasAllAppsHeaderExtra ? ALL_APPS_HEADER_EXTRA : HOTSEAT_ICONS | MEMINFO);
+         }
+     }
+ 
+diff --git a/quickstep/recents_ui_overrides/src/com/android/quickstep/RecentsActivity.java b/quickstep/recents_ui_overrides/src/com/android/quickstep/RecentsActivity.java
+index 6f2f9fb52..adf3fcff3 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/quickstep/RecentsActivity.java
++++ b/quickstep/recents_ui_overrides/src/com/android/quickstep/RecentsActivity.java
+@@ -58,6 +58,7 @@ import com.android.quickstep.fallback.FallbackRecentsView;
+ import com.android.quickstep.fallback.RecentsDragLayer;
+ import com.android.quickstep.fallback.RecentsState;
+ import com.android.quickstep.util.RecentsAtomicAnimationFactory;
++import com.android.quickstep.views.MemInfoView;
+ import com.android.quickstep.views.OverviewActionsView;
+ import com.android.quickstep.views.TaskView;
+ import com.android.systemui.shared.system.ActivityOptionsCompat;
+@@ -82,6 +83,7 @@ public final class RecentsActivity extends StatefulActivity<RecentsState> {
+     private RecentsDragLayer mDragLayer;
+     private FallbackRecentsView mFallbackRecentsView;
+     private OverviewActionsView mActionsView;
++    private MemInfoView mMemInfoView;
+ 
+     private Configuration mOldConfig;
+ 
+@@ -96,9 +98,11 @@ public final class RecentsActivity extends StatefulActivity<RecentsState> {
+         mDragLayer = findViewById(R.id.drag_layer);
+         mFallbackRecentsView = findViewById(R.id.overview_panel);
+         mActionsView = findViewById(R.id.overview_actions_view);
++        mMemInfoView= findViewById(R.id.meminfo);
+ 
+         mDragLayer.recreateControllers();
+-        mFallbackRecentsView.init(mActionsView);
++        mFallbackRecentsView.init(mActionsView, mMemInfoView);
++        mMemInfoView.setDp(mDeviceProfile);
+     }
+ 
+     @Override
+@@ -157,6 +161,10 @@ public final class RecentsActivity extends StatefulActivity<RecentsState> {
+         return mActionsView;
+     }
+ 
++    public MemInfoView getMemInfoView() {
++        return mMemInfoView;
++    }
++
+     @Override
+     public void returnToHomescreen() {
+         super.returnToHomescreen();
+diff --git a/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/FallbackRecentsStateController.java b/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/FallbackRecentsStateController.java
+index 7af77ef60..c1a4c26f8 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/FallbackRecentsStateController.java
++++ b/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/FallbackRecentsStateController.java
+@@ -34,6 +34,7 @@ import com.android.launcher3.anim.PropertySetter;
+ import com.android.launcher3.statemanager.StateManager.StateHandler;
+ import com.android.launcher3.states.StateAnimationConfig;
+ import com.android.launcher3.util.MultiValueAlpha;
++import com.android.quickstep.views.MemInfoView;
+ import com.android.quickstep.RecentsActivity;
+ 
+ /**
+@@ -87,6 +88,8 @@ public class FallbackRecentsStateController implements StateHandler<RecentsState
+                 config.getInterpolator(ANIM_OVERVIEW_TRANSLATE_X, LINEAR));
+         setter.setFloat(mRecentsView, TASK_SECONDARY_TRANSLATION, 0f,
+                 config.getInterpolator(ANIM_OVERVIEW_TRANSLATE_Y, LINEAR));
++        setter.setFloat(mActivity.getMemInfoView(), MemInfoView.STATE_CTRL_ALPHA, state.hasMemInfoView() ? 1 : 0,
++                config.getInterpolator(ANIM_OVERVIEW_SCALE, LINEAR));
+ 
+         setter.setFloat(mRecentsView, TASK_MODALNESS, state.getOverviewModalness(),
+                 config.getInterpolator(ANIM_OVERVIEW_MODAL, LINEAR));
+diff --git a/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/FallbackRecentsView.java b/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/FallbackRecentsView.java
+index ffe9d6aed..9475f936c 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/FallbackRecentsView.java
++++ b/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/FallbackRecentsView.java
+@@ -28,6 +28,7 @@ import com.android.launcher3.anim.PendingAnimation;
+ import com.android.launcher3.statemanager.StateManager.StateListener;
+ import com.android.quickstep.FallbackActivityInterface;
+ import com.android.quickstep.RecentsActivity;
++import com.android.quickstep.views.MemInfoView;
+ import com.android.quickstep.views.OverviewActionsView;
+ import com.android.quickstep.views.RecentsView;
+ import com.android.quickstep.views.TaskView;
+@@ -52,8 +53,8 @@ public class FallbackRecentsView extends RecentsView<RecentsActivity>
+     }
+ 
+     @Override
+-    public void init(OverviewActionsView actionsView) {
+-        super.init(actionsView);
++    public void init(OverviewActionsView actionsView, MemInfoView memInfoView) {
++        super.init(actionsView, memInfoView);
+         setOverviewStateEnabled(true);
+         setOverlayEnabled(true);
+     }
+diff --git a/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/RecentsState.java b/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/RecentsState.java
+index f15a9de6f..aa3104319 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/RecentsState.java
++++ b/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/RecentsState.java
+@@ -31,10 +31,11 @@ public class RecentsState implements BaseState<RecentsState> {
+     private static final int FLAG_MODAL = BaseState.getFlag(0);
+     private static final int FLAG_HAS_BUTTONS = BaseState.getFlag(1);
+     private static final int FLAG_FULL_SCREEN = BaseState.getFlag(2);
++    private static final int FLAG_MEMINFO = BaseState.getFlag(3);
+ 
+-    public static final RecentsState DEFAULT = new RecentsState(0, FLAG_HAS_BUTTONS);
++    public static final RecentsState DEFAULT = new RecentsState(0, FLAG_HAS_BUTTONS | FLAG_MEMINFO);
+     public static final RecentsState MODAL_TASK = new ModalState(1,
+-            FLAG_DISABLE_RESTORE | FLAG_HAS_BUTTONS | FLAG_MODAL);
++            FLAG_DISABLE_RESTORE | FLAG_HAS_BUTTONS | FLAG_MODAL | FLAG_MEMINFO);
+     public static final RecentsState BACKGROUND_APP = new BackgroundAppState(2,
+             FLAG_DISABLE_RESTORE | FLAG_NON_INTERACTIVE | FLAG_FULL_SCREEN);
+ 
+@@ -86,6 +87,13 @@ public class RecentsState implements BaseState<RecentsState> {
+         return hasFlag(FLAG_HAS_BUTTONS);
+     }
+ 
++    /**
++     * For this state, whether mid clear button should be shown.
++     */
++    public boolean hasMemInfoView() {
++        return hasFlag(FLAG_MEMINFO);
++    }
++
+     public float[] getOverviewScaleAndOffset(RecentsActivity activity) {
+         return new float[] { NO_SCALE, NO_OFFSET };
+     }
+diff --git a/quickstep/recents_ui_overrides/src/com/android/quickstep/views/LauncherRecentsView.java b/quickstep/recents_ui_overrides/src/com/android/quickstep/views/LauncherRecentsView.java
+index b934c29d2..a9ad8d886 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/quickstep/views/LauncherRecentsView.java
++++ b/quickstep/recents_ui_overrides/src/com/android/quickstep/views/LauncherRecentsView.java
+@@ -99,8 +99,8 @@ public class LauncherRecentsView extends RecentsView<BaseQuickstepLauncher>
+     }
+ 
+     @Override
+-    public void init(OverviewActionsView actionsView) {
+-        super.init(actionsView);
++    public void init(OverviewActionsView actionsView, MemInfoView memInfoView) {
++        super.init(actionsView, memInfoView);
+         setContentAlpha(0);
+     }
+ 
+diff --git a/quickstep/recents_ui_overrides/src/com/android/quickstep/views/MemInfoView.java b/quickstep/recents_ui_overrides/src/com/android/quickstep/views/MemInfoView.java
+new file mode 100644
+index 000000000..a75287ddf
+--- /dev/null
++++ b/quickstep/recents_ui_overrides/src/com/android/quickstep/views/MemInfoView.java
+@@ -0,0 +1,154 @@
++/*
++ * Copyright (C) 2022 Project Kaleidoscope
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.quickstep.views;
++
++import android.app.ActivityManager;
++import android.content.Context;
++import android.os.Handler;
++import android.os.Looper;
++import android.util.AttributeSet;
++import android.util.FloatProperty;
++import android.view.Gravity;
++import android.view.View;
++import android.widget.FrameLayout.LayoutParams;
++import android.widget.TextView;
++
++import com.android.launcher3.anim.AlphaUpdateListener;
++import com.android.launcher3.DeviceProfile;
++import com.android.launcher3.util.MultiValueAlpha;
++import com.android.launcher3.R;
++import com.android.quickstep.SysUINavigationMode.Mode;
++
++import java.lang.Runnable;
++import java.math.BigDecimal;
++
++public class MemInfoView extends TextView {
++
++    // When to show GB instead of MB
++    private static final int UNIT_CONVERT_THRESHOLD = 1024; /* MiB */
++
++    private static final BigDecimal GB2MB = new BigDecimal(1024);
++
++    private static final int ALPHA_STATE_CTRL = 0;
++    public static final int ALPHA_FS_PROGRESS = 1;
++
++    public static final FloatProperty<MemInfoView> STATE_CTRL_ALPHA =
++            new FloatProperty<MemInfoView>("state control alpha") {
++                @Override
++                public Float get(MemInfoView view) {
++                    return view.getAlpha(ALPHA_STATE_CTRL);
++                }
++
++                @Override
++                public void setValue(MemInfoView view, float v) {
++                    view.setAlpha(ALPHA_STATE_CTRL, v);
++                }
++            };
++
++    private DeviceProfile mDp;
++    private MultiValueAlpha mAlpha;
++    private ActivityManager mActivityManager;
++
++    private Handler mHandler;
++    private MemInfoWorker mWorker;
++
++    private String mTranslatedTotal;
++    private String mTranslatedAvailable;
++
++    public MemInfoView(Context context, AttributeSet attrs) {
++        super(context, attrs);
++
++        mAlpha = new MultiValueAlpha(this, 2);
++        mAlpha.setUpdateVisibility(true);
++        mActivityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
++        mHandler = new Handler(Looper.getMainLooper());
++        mWorker = new MemInfoWorker();
++
++        mTranslatedTotal = context.getResources().getString(R.string.meminfo_total);
++        mTranslatedAvailable = context.getResources().getString(R.string.meminfo_available);
++    }
++
++    /* Hijack this method to detect visibility rather than
++     * onVisibilityChanged() because the the latter one can be
++     * influenced by more factors, leading to unstable behavior. */
++    @Override
++    public void setVisibility(int visibility) {
++        super.setVisibility(visibility);
++
++        if (visibility == VISIBLE)
++            mHandler.post(mWorker);
++        else
++            mHandler.removeCallbacks(mWorker);
++    }
++
++    public void setDp(DeviceProfile dp) {
++        mDp = dp;
++    }
++
++    public void setAlpha(int alphaType, float alpha) {
++        mAlpha.getProperty(alphaType).setValue(alpha);
++    }
++
++    public float getAlpha(int alphaType) {
++        return mAlpha.getProperty(alphaType).getValue();
++    }
++
++    public void updateVerticalMargin(Mode mode) {
++        LayoutParams lp = (LayoutParams)getLayoutParams();
++        int bottomMargin;
++
++        if (mode == Mode.THREE_BUTTONS)
++            bottomMargin = mDp.memInfoMarginThreeButtonPx;
++        else
++            bottomMargin = mDp.memInfoMarginGesturePx;
++
++        lp.setMargins(lp.leftMargin, lp.topMargin, lp.rightMargin, bottomMargin);
++        lp.gravity = Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM;
++    }
++
++    private String unitConvert(long valueMiB, boolean alignToGB) {
++        BigDecimal rawVal = new BigDecimal(valueMiB);
++
++        if (alignToGB)
++            return rawVal.divide(GB2MB, 0, BigDecimal.ROUND_UP) + " GB";
++
++        if (valueMiB > UNIT_CONVERT_THRESHOLD)
++            return rawVal.divide(GB2MB, 1, BigDecimal.ROUND_HALF_UP) + " GB";
++        else
++            return rawVal + " MB";
++    }
++
++    private void updateMemInfoText(long availMemMiB, long totalMemMiB) {
++        String text = String.format("%s %s | %s %s",
++                        unitConvert(availMemMiB, false), mTranslatedAvailable,
++                        unitConvert(totalMemMiB, true), mTranslatedTotal);
++        setText(text);
++    }
++
++    private class MemInfoWorker implements Runnable {
++        @Override
++        public void run() {
++            ActivityManager.MemoryInfo memInfo = new ActivityManager.MemoryInfo();
++            mActivityManager.getMemoryInfo(memInfo);
++            long availMemMiB = memInfo.availMem / (1024 * 1024);
++            long totalMemMiB = memInfo.totalMem / (1024 * 1024);
++            updateMemInfoText(availMemMiB, totalMemMiB);
++
++            mHandler.postDelayed(this, 1000);
++        }
++    }
++}
+\ No newline at end of file
+diff --git a/quickstep/recents_ui_overrides/src/com/android/quickstep/views/RecentsView.java b/quickstep/recents_ui_overrides/src/com/android/quickstep/views/RecentsView.java
+index 08309fba5..07cab70bb 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/quickstep/views/RecentsView.java
++++ b/quickstep/recents_ui_overrides/src/com/android/quickstep/views/RecentsView.java
+@@ -411,6 +411,8 @@ public abstract class RecentsView<T extends StatefulActivity> extends PagedView
+     private int mTaskViewStartIndex = 0;
+     private OverviewActionsView mActionsView;
+ 
++    private MemInfoView mMemInfoView;
++
+     private BaseActivity.MultiWindowModeChangedListener mMultiWindowModeChangedListener =
+             (inMultiWindowMode) -> {
+                 if (mOrientationState != null) {
+@@ -543,8 +545,9 @@ public abstract class RecentsView<T extends StatefulActivity> extends PagedView
+         loadVisibleTaskData();
+     }
+ 
+-    public void init(OverviewActionsView actionsView) {
++    public void init(OverviewActionsView actionsView, MemInfoView memInfoView) {
+         mActionsView = actionsView;
++        mMemInfoView = memInfoView;
+         mActionsView.updateHiddenFlags(HIDDEN_NO_TASKS, getTaskViewCount() == 0);
+         mClearAllButton = (Button) mActionsView.findViewById(R.id.clear_all);
+         mClearAllButton.setOnClickListener(this::dismissAllTasks);
+@@ -869,6 +872,8 @@ public abstract class RecentsView<T extends StatefulActivity> extends PagedView
+         // Fade out the actions view quickly (0.1 range)
+         mActionsView.getFullscreenAlpha().setValue(
+                 mapToRange(fullscreenProgress, 0, 0.1f, 1f, 0f, LINEAR));
++        float alpha = mapToRange(fullscreenProgress, 0, 0.1f, 1f, 0f, LINEAR);
++        mMemInfoView.setAlpha(MemInfoView.ALPHA_FS_PROGRESS, alpha);
+     }
+ 
+     private void updateTaskStackListenerState() {
+diff --git a/quickstep/res/layout/meminfo.xml b/quickstep/res/layout/meminfo.xml
+new file mode 100644
+index 000000000..62829be6d
+--- /dev/null
++++ b/quickstep/res/layout/meminfo.xml
+@@ -0,0 +1,6 @@
++<?xml version="1.0" encoding="utf-8"?>
++<com.android.quickstep.views.MemInfoView xmlns:android="http://schemas.android.com/apk/res/android"
++    android:id="@+id/meminfo"
++    android:layout_width="wrap_content"
++    android:layout_height="wrap_content"
++    android:visibility="gone"/>
+\ No newline at end of file
+diff --git a/quickstep/res/layout/overview_actions_container.xml b/quickstep/res/layout/overview_actions_container.xml
+index 302cabf8a..46e31a5cc 100644
+--- a/quickstep/res/layout/overview_actions_container.xml
++++ b/quickstep/res/layout/overview_actions_container.xml
+@@ -23,7 +23,7 @@
+         android:id="@+id/action_buttons"
+         android:layout_width="match_parent"
+         android:layout_height="wrap_content"
+-        android:layout_gravity="center"
++        android:layout_gravity="center|top"
+         android:orientation="horizontal">
+ 
+         <Space
+diff --git a/quickstep/res/values/dimens.xml b/quickstep/res/values/dimens.xml
+index 9d703167d..8da63e5a2 100644
+--- a/quickstep/res/values/dimens.xml
++++ b/quickstep/res/values/dimens.xml
+@@ -98,4 +98,8 @@
+     <dimen name="swipe_edu_circle_size">64dp</dimen>
+     <dimen name="swipe_edu_width">80dp</dimen>
+     <dimen name="swipe_edu_max_height">184dp</dimen>
++
++    <!-- Meminfo in overview -->
++    <dimen name="meminfo_bottom_margin_gesture">30dp</dimen>
++    <dimen name="meminfo_bottom_margin_three_button">10dp</dimen>
+ </resources>
+diff --git a/quickstep/src/com/android/launcher3/BaseQuickstepLauncher.java b/quickstep/src/com/android/launcher3/BaseQuickstepLauncher.java
+index 235df425b..bc3256dd8 100644
+--- a/quickstep/src/com/android/launcher3/BaseQuickstepLauncher.java
++++ b/quickstep/src/com/android/launcher3/BaseQuickstepLauncher.java
+@@ -51,6 +51,7 @@ import com.android.quickstep.util.QuickstepOnboardingPrefs;
+ import com.android.quickstep.util.RemoteAnimationProvider;
+ import com.android.quickstep.util.RemoteFadeOutAnimationListener;
+ import com.android.quickstep.util.ShelfPeekAnim;
++import com.android.quickstep.views.MemInfoView;
+ import com.android.quickstep.views.OverviewActionsView;
+ import com.android.quickstep.views.RecentsView;
+ import com.android.systemui.shared.system.ActivityManagerWrapper;
+@@ -77,6 +78,7 @@ public abstract class BaseQuickstepLauncher extends Launcher
+ 
+     private OverviewActionsView mActionsView;
+     protected HotseatPredictionController mHotseatPredictionController;
++    private MemInfoView mMemInfoView;
+ 
+     @Override
+     protected void onCreate(Bundle savedInstanceState) {
+@@ -98,6 +100,9 @@ public abstract class BaseQuickstepLauncher extends Launcher
+         if (mActionsView != null && isOverviewActionsEnabled()) {
+             mActionsView.updateVerticalMargin(newMode);
+         }
++        if (mMemInfoView != null) {
++            mMemInfoView.updateVerticalMargin(newMode);
++        }
+     }
+ 
+     @Override
+@@ -185,13 +190,17 @@ public abstract class BaseQuickstepLauncher extends Launcher
+ 
+         SysUINavigationMode.INSTANCE.get(this).updateMode();
+         mActionsView = findViewById(R.id.overview_actions_view);
+-        ((RecentsView) getOverviewPanel()).init(mActionsView);
++        mMemInfoView = findViewById(R.id.meminfo);
++        ((RecentsView) getOverviewPanel()).init(mActionsView, mMemInfoView);
+ 
+         if (isOverviewActionsEnabled()) {
+             // Overview is above all other launcher elements, including qsb, so move it to the top.
+             getOverviewPanel().bringToFront();
+             mActionsView.bringToFront();
++            mMemInfoView.bringToFront();
++            mMemInfoView.setDp(getDeviceProfile());
+             mActionsView.updateVerticalMargin(SysUINavigationMode.getMode(this));
++            mMemInfoView.updateVerticalMargin(SysUINavigationMode.getMode(this));
+         }
+     }
+ 
+@@ -203,6 +212,10 @@ public abstract class BaseQuickstepLauncher extends Launcher
+         return (T) mActionsView;
+     }
+ 
++    public MemInfoView getMemInfoView () {
++        return mMemInfoView;
++    }
++
+     @Override
+     protected void closeOpenViews(boolean animate) {
+         super.closeOpenViews(animate);
+diff --git a/quickstep/src/com/android/launcher3/uioverrides/BaseRecentsViewStateController.java b/quickstep/src/com/android/launcher3/uioverrides/BaseRecentsViewStateController.java
+index aad7e17df..fd3a4f7e6 100644
+--- a/quickstep/src/com/android/launcher3/uioverrides/BaseRecentsViewStateController.java
++++ b/quickstep/src/com/android/launcher3/uioverrides/BaseRecentsViewStateController.java
+@@ -16,6 +16,7 @@
+ 
+ package com.android.launcher3.uioverrides;
+ 
++import static com.android.launcher3.LauncherState.MEMINFO;
+ import static com.android.launcher3.anim.Interpolators.AGGRESSIVE_EASE_IN_OUT;
+ import static com.android.launcher3.anim.Interpolators.LINEAR;
+ import static com.android.launcher3.graphics.OverviewScrim.SCRIM_MULTIPLIER;
+@@ -41,6 +42,7 @@ import com.android.launcher3.BaseQuickstepLauncher;
+ import com.android.launcher3.LauncherState;
+ import com.android.launcher3.anim.PendingAnimation;
+ import com.android.launcher3.graphics.OverviewScrim;
++import com.android.quickstep.views.MemInfoView;
+ import com.android.launcher3.statemanager.StateManager.StateHandler;
+ import com.android.launcher3.states.StateAnimationConfig;
+ import com.android.quickstep.views.RecentsView;
+@@ -104,6 +106,8 @@ public abstract class BaseRecentsViewStateController<T extends RecentsView>
+                 config.getInterpolator(ANIM_OVERVIEW_TRANSLATE_X, LINEAR));
+         setter.setFloat(mRecentsView, TASK_SECONDARY_TRANSLATION, 0f,
+                 config.getInterpolator(ANIM_OVERVIEW_TRANSLATE_Y, LINEAR));
++        setter.setFloat(mLauncher.getMemInfoView(), MemInfoView.STATE_CTRL_ALPHA, toState.overviewUi ? 1 : 0,
++                config.getInterpolator(ANIM_OVERVIEW_SCALE, LINEAR));
+ 
+         setter.setFloat(mRecentsView, getContentAlphaProperty(), toState.overviewUi ? 1 : 0,
+                 config.getInterpolator(ANIM_OVERVIEW_FADE, AGGRESSIVE_EASE_IN_OUT));
+diff --git a/res/values-zh-rCN/lineage_strings.xml b/res/values-zh-rCN/lineage_strings.xml
+index 671faf890..205078818 100644
+--- a/res/values-zh-rCN/lineage_strings.xml
++++ b/res/values-zh-rCN/lineage_strings.xml
+@@ -36,4 +36,6 @@
+     <string name="icon_pack_default_label">默认</string>
+     <string name="icon_pack_add">安装更多</string>
+     <string name="icon_pack_no_market">没有可用的应用商店</string>
++    <string name="meminfo_available">可用</string>
++    <string name="meminfo_total">总内存</string>
+ </resources>
+diff --git a/res/values/lineage_strings.xml b/res/values/lineage_strings.xml
+index 506d9bf30..b48fc4a5d 100644
+--- a/res/values/lineage_strings.xml
++++ b/res/values/lineage_strings.xml
+@@ -55,4 +55,8 @@
+     <string name="icon_pack_default_label">Default</string>
+     <string name="icon_pack_add">Install more</string>
+     <string name="icon_pack_no_market">There\'s no available app store</string>
++
++    <!-- Memory info -->
++     <string name="meminfo_available">Available</string>
++     <string name="meminfo_total">Total</string>
+ </resources>
+diff --git a/src/com/android/launcher3/DeviceProfile.java b/src/com/android/launcher3/DeviceProfile.java
+index a5ccd1825..37c3490e7 100644
+--- a/src/com/android/launcher3/DeviceProfile.java
++++ b/src/com/android/launcher3/DeviceProfile.java
+@@ -145,6 +145,10 @@ public class DeviceProfile {
+ 
+     private SharedPreferences mPrefs;
+ 
++    // Meminfo in overview
++    public int memInfoMarginGesturePx;
++    public int memInfoMarginThreeButtonPx;
++
+     DeviceProfile(Context context, InvariantDeviceProfile inv, DefaultDisplay.Info info,
+             Point minSize, Point maxSize, int width, int height, boolean isLandscape,
+             boolean isMultiWindowMode, boolean transposeLayoutWithOrientation,
+@@ -230,6 +234,11 @@ public class DeviceProfile {
+                 : (res.getDimensionPixelSize(R.dimen.dynamic_grid_hotseat_extra_vertical_size)
+                         + hotseatBarTopPaddingPx + hotseatBarBottomPaddingPx));
+ 
++        memInfoMarginGesturePx = res.getDimensionPixelSize(
++                R.dimen.meminfo_bottom_margin_gesture);
++        memInfoMarginThreeButtonPx = res.getDimensionPixelSize(
++                R.dimen.meminfo_bottom_margin_three_button);
++
+         // Calculate all of the remaining variables.
+         updateAvailableDimensions(res);
+ 
+diff --git a/src/com/android/launcher3/LauncherState.java b/src/com/android/launcher3/LauncherState.java
+index 39b0f2ffb..bc9b6f43d 100644
+--- a/src/com/android/launcher3/LauncherState.java
++++ b/src/com/android/launcher3/LauncherState.java
+@@ -62,6 +62,8 @@ public abstract class LauncherState implements BaseState<LauncherState> {
+     public static final int APPS_VIEW_ITEM_MASK =
+             HOTSEAT_SEARCH_BOX | ALL_APPS_HEADER | ALL_APPS_HEADER_EXTRA | ALL_APPS_CONTENT;
+ 
++    public static final int MEMINFO = 1 << 9;
++
+     // Flag indicating workspace has multiple pages visible.
+     public static final int FLAG_MULTI_PAGE = BaseState.getFlag(0);
+     // Flag indicating that workspace and its contents are not accessible
+-- 
+2.25.1
+
