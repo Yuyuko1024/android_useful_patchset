@@ -1,0 +1,91 @@
+From f2f6d229822e650560e44c5ec11689cbf556249a Mon Sep 17 00:00:00 2001
+From: LibXZR <i@xzr.moe>
+Date: Sun, 27 Mar 2022 02:16:42 +0000
+Subject: [PATCH 4/5] Disable Overview buttons Co-authored-by: TH779
+ <i@779.moe>
+
+Change-Id: I6b30c43540710630e8973e3b1973ca01aaa1159d
+---
+ .../uioverrides/states/OverviewModalTaskState.java         | 2 +-
+ .../launcher3/uioverrides/states/OverviewState.java        | 7 +++----
+ .../src/com/android/quickstep/fallback/RecentsState.java   | 4 ++--
+ quickstep/res/layout/overview_actions_container.xml        | 5 +++--
+ 4 files changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewModalTaskState.java b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewModalTaskState.java
+index 4e407921a..3125b2cbd 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewModalTaskState.java
++++ b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewModalTaskState.java
+@@ -44,7 +44,7 @@ public class OverviewModalTaskState extends OverviewState {
+ 
+     @Override
+     public int getVisibleElements(Launcher launcher) {
+-        return OVERVIEW_BUTTONS | MID_CLEAR_ALL_BUTTON | MEMINFO;
++        return MID_CLEAR_ALL_BUTTON | MEMINFO;
+     }
+ 
+     @Override
+diff --git a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewState.java b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewState.java
+index a22268e9e..f5194d421 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewState.java
++++ b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewState.java
+@@ -131,14 +131,13 @@ public class OverviewState extends LauncherState {
+         RecentsView recentsView = launcher.getOverviewPanel();
+         if (ENABLE_OVERVIEW_ACTIONS.get() && removeShelfFromOverview(launcher) ||
+                 hideShelfInTwoButtonLandscape(launcher, recentsView.getPagedOrientationHandler())) {
+-            return OVERVIEW_BUTTONS | MID_CLEAR_ALL_BUTTON | MEMINFO;
++            return  MID_CLEAR_ALL_BUTTON | MEMINFO;
+         } else if (launcher.getDeviceProfile().isVerticalBarLayout()) {
+-            return VERTICAL_SWIPE_INDICATOR | OVERVIEW_BUTTONS | MID_CLEAR_ALL_BUTTON | MEMINFO;
++            return VERTICAL_SWIPE_INDICATOR |  MID_CLEAR_ALL_BUTTON | MEMINFO;
+         } else {
+             boolean hasAllAppsHeaderExtra = launcher.getAppsView() != null
+                     && launcher.getAppsView().getFloatingHeaderView().hasVisibleContent();
+-            return HOTSEAT_SEARCH_BOX | VERTICAL_SWIPE_INDICATOR | OVERVIEW_BUTTONS
+-                    | (hasAllAppsHeaderExtra ? ALL_APPS_HEADER_EXTRA : HOTSEAT_ICONS | MID_CLEAR_ALL_BUTTON | MEMINFO);
++            return HOTSEAT_SEARCH_BOX | VERTICAL_SWIPE_INDICATOR | (hasAllAppsHeaderExtra ? ALL_APPS_HEADER_EXTRA : HOTSEAT_ICONS | MID_CLEAR_ALL_BUTTON | MEMINFO);
+         }
+     }
+ 
+diff --git a/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/RecentsState.java b/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/RecentsState.java
+index 448935e9e..8c9e877d5 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/RecentsState.java
++++ b/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/RecentsState.java
+@@ -34,9 +34,9 @@ public class RecentsState implements BaseState<RecentsState> {
+     private static final int FLAG_MEMINFO = BaseState.getFlag(3);
+     private static final int FLAG_MID_CLEAR_ALL_BUTTON = BaseState.getFlag(4);
+ 
+-    public static final RecentsState DEFAULT = new RecentsState(0, FLAG_HAS_BUTTONS | FLAG_MID_CLEAR_ALL_BUTTON | FLAG_MEMINFO);
++    public static final RecentsState DEFAULT = new RecentsState(0, FLAG_MID_CLEAR_ALL_BUTTON | FLAG_MEMINFO);
+     public static final RecentsState MODAL_TASK = new ModalState(1,
+-            FLAG_DISABLE_RESTORE | FLAG_HAS_BUTTONS | FLAG_MODAL | FLAG_MID_CLEAR_ALL_BUTTON | FLAG_MEMINFO);
++            FLAG_DISABLE_RESTORE | FLAG_MODAL | FLAG_MID_CLEAR_ALL_BUTTON | FLAG_MEMINFO);
+     public static final RecentsState BACKGROUND_APP = new BackgroundAppState(2,
+             FLAG_DISABLE_RESTORE | FLAG_NON_INTERACTIVE | FLAG_FULL_SCREEN);
+ 
+diff --git a/quickstep/res/layout/overview_actions_container.xml b/quickstep/res/layout/overview_actions_container.xml
+index 46e31a5cc..8ea282b26 100644
+--- a/quickstep/res/layout/overview_actions_container.xml
++++ b/quickstep/res/layout/overview_actions_container.xml
+@@ -38,7 +38,8 @@
+             android:layout_height="wrap_content"
+             android:drawableStart="@drawable/ic_screenshot"
+             android:text="@string/action_screenshot"
+-            android:theme="@style/ThemeControlHighlightWorkspaceColor" />
++            android:theme="@style/ThemeControlHighlightWorkspaceColor"
++            android:visibility="gone" />
+ 
+         <Space
+             android:layout_width="0dp"
+@@ -53,7 +54,7 @@
+             android:text="@string/recents_clear_all"
+             android:theme="@style/ThemeControlHighlightWorkspaceColor"
+             android:drawableStart="@drawable/ic_clear_all_recents"
+-            />
++            android:visibility="gone"/>
+ 
+         <Space
+             android:layout_width="0dp"
+-- 
+2.25.1
+

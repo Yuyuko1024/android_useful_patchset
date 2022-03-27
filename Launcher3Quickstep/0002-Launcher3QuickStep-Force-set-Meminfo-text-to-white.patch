@@ -1,0 +1,66 @@
+From dfedb7bf21d7f436da710117965c4f07ff30fc5e Mon Sep 17 00:00:00 2001
+From: Yuyuko1024 <dingwenxuan4@gmail.com>
+Date: Sun, 27 Mar 2022 01:24:07 +0000
+Subject: [PATCH 2/5] Launcher3QuickStep: Force set Meminfo text to white It
+ does not need to change color with the system
+
+Change-Id: I9bb7a6a29fe9f541f8c5ab21d290dc2aa777f76a
+---
+ .../res/layout/fallback_recents_activity.xml                | 6 +++---
+ .../recents_ui_overrides/res/layout/overview_panel.xml      | 6 +++---
+ quickstep/res/layout/meminfo.xml                            | 1 +
+ 3 files changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/quickstep/recents_ui_overrides/res/layout/fallback_recents_activity.xml b/quickstep/recents_ui_overrides/res/layout/fallback_recents_activity.xml
+index 6d146c130..cd955d8ea 100644
+--- a/quickstep/recents_ui_overrides/res/layout/fallback_recents_activity.xml
++++ b/quickstep/recents_ui_overrides/res/layout/fallback_recents_activity.xml
+@@ -34,12 +34,12 @@
+             android:outlineProvider="none"
+             android:theme="@style/HomeScreenElementTheme" />
+ 
+-        <include
+-            layout="@layout/meminfo" />
+-
+         <include
+             android:id="@+id/overview_actions_view"
+             layout="@layout/overview_actions_container" />
+ 
++        <include
++            layout="@layout/meminfo" />
++
+     </com.android.quickstep.fallback.RecentsDragLayer>
+ </com.android.launcher3.LauncherRootView>
+diff --git a/quickstep/recents_ui_overrides/res/layout/overview_panel.xml b/quickstep/recents_ui_overrides/res/layout/overview_panel.xml
+index 1b73cd854..3fbb703e6 100644
+--- a/quickstep/recents_ui_overrides/res/layout/overview_panel.xml
++++ b/quickstep/recents_ui_overrides/res/layout/overview_panel.xml
+@@ -25,11 +25,11 @@
+         android:theme="@style/HomeScreenElementTheme"
+         android:visibility="invisible" />
+ 
+-    <include
+-            layout="@layout/meminfo" />
+-
+     <include
+         android:id="@+id/overview_actions_view"
+         layout="@layout/overview_actions_container" />
+ 
++    <include
++            layout="@layout/meminfo" />
++
+ </merge>
+diff --git a/quickstep/res/layout/meminfo.xml b/quickstep/res/layout/meminfo.xml
+index 62829be6d..c9a46424d 100644
+--- a/quickstep/res/layout/meminfo.xml
++++ b/quickstep/res/layout/meminfo.xml
+@@ -3,4 +3,5 @@
+     android:id="@+id/meminfo"
+     android:layout_width="wrap_content"
+     android:layout_height="wrap_content"
++    android:textColor="@android:color/white"
+     android:visibility="gone"/>
+\ No newline at end of file
+-- 
+2.25.1
+

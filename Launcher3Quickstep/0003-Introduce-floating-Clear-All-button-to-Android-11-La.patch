@@ -1,0 +1,642 @@
+From 92a320566610b6d42cfd60f335d896bc118ae77a Mon Sep 17 00:00:00 2001
+From: LibXZR <i@xzr.moe>
+Date: Sun, 27 Mar 2022 02:07:24 +0000
+Subject: [PATCH 3/5] Introduce floating Clear All button to Android 11
+ Launcher3QuickStep and now I bringing it to the A11 too! Kang from
+ https://github.com/Project-Kaleidoscope/android_packages_apps_Launcher3/commit/e4901a67813eb742a679a388eb41a307fa73d2ee
+ Co-authored-by: TH779 <i@779.moe>
+
+Change-Id: I5d07ec3f7e4db6388604d7aee4ca2eb00a341f14
+---
+ .../res/layout/fallback_recents_activity.xml  |  3 +
+ .../res/layout/overview_panel.xml             |  3 +
+ .../RecentsViewStateController.java           |  5 +
+ .../states/BackgroundAppState.java            |  2 +-
+ .../states/OverviewModalTaskState.java        |  2 +-
+ .../uioverrides/states/OverviewState.java     |  6 +-
+ .../android/quickstep/RecentsActivity.java    | 13 ++-
+ .../FallbackRecentsStateController.java       |  5 +-
+ .../fallback/FallbackRecentsView.java         |  5 +-
+ .../quickstep/fallback/RecentsState.java      | 12 ++-
+ .../quickstep/views/LauncherRecentsView.java  |  4 +-
+ .../quickstep/views/MidClearAllButton.java    | 96 +++++++++++++++++++
+ .../android/quickstep/views/RecentsView.java  | 18 +++-
+ quickstep/res/drawable/bg_ripple_circle.xml   |  7 ++
+ quickstep/res/drawable/ic_clear_all.xml       |  5 +
+ quickstep/res/layout/mid_clear_all_button.xml | 10 ++
+ quickstep/res/values/colors.xml               |  4 +
+ quickstep/res/values/dimens.xml               |  6 ++
+ .../launcher3/BaseQuickstepLauncher.java      | 14 ++-
+ res/values-night-v26/colors.xml               |  6 ++
+ src/com/android/launcher3/DeviceProfile.java  |  9 ++
+ src/com/android/launcher3/LauncherState.java  |  1 +
+ 22 files changed, 216 insertions(+), 20 deletions(-)
+ create mode 100644 quickstep/recents_ui_overrides/src/com/android/quickstep/views/MidClearAllButton.java
+ create mode 100644 quickstep/res/drawable/bg_ripple_circle.xml
+ create mode 100644 quickstep/res/drawable/ic_clear_all.xml
+ create mode 100644 quickstep/res/layout/mid_clear_all_button.xml
+ create mode 100644 res/values-night-v26/colors.xml
+
+diff --git a/quickstep/recents_ui_overrides/res/layout/fallback_recents_activity.xml b/quickstep/recents_ui_overrides/res/layout/fallback_recents_activity.xml
+index cd955d8ea..2dff79013 100644
+--- a/quickstep/recents_ui_overrides/res/layout/fallback_recents_activity.xml
++++ b/quickstep/recents_ui_overrides/res/layout/fallback_recents_activity.xml
+@@ -34,6 +34,9 @@
+             android:outlineProvider="none"
+             android:theme="@style/HomeScreenElementTheme" />
+ 
++        <include
++            layout="@layout/mid_clear_all_button" />
++
+         <include
+             android:id="@+id/overview_actions_view"
+             layout="@layout/overview_actions_container" />
+diff --git a/quickstep/recents_ui_overrides/res/layout/overview_panel.xml b/quickstep/recents_ui_overrides/res/layout/overview_panel.xml
+index 3fbb703e6..157c293bf 100644
+--- a/quickstep/recents_ui_overrides/res/layout/overview_panel.xml
++++ b/quickstep/recents_ui_overrides/res/layout/overview_panel.xml
+@@ -25,6 +25,9 @@
+         android:theme="@style/HomeScreenElementTheme"
+         android:visibility="invisible" />
+ 
++    <include
++        layout="@layout/mid_clear_all_button" />
++
+     <include
+         android:id="@+id/overview_actions_view"
+         layout="@layout/overview_actions_container" />
+diff --git a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/RecentsViewStateController.java b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/RecentsViewStateController.java
+index 16122923f..a48ef97ca 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/RecentsViewStateController.java
++++ b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/RecentsViewStateController.java
+@@ -16,6 +16,7 @@
+ package com.android.launcher3.uioverrides;
+ 
+ import static com.android.launcher3.LauncherState.OVERVIEW_BUTTONS;
++import static com.android.launcher3.LauncherState.MID_CLEAR_ALL_BUTTON;
+ import static com.android.launcher3.LauncherState.MEMINFO;
+ import static com.android.launcher3.anim.Interpolators.LINEAR;
+ import static com.android.launcher3.states.StateAnimationConfig.ANIM_OVERVIEW_ACTIONS_FADE;
+@@ -37,6 +38,7 @@ import com.android.launcher3.anim.PropertySetter;
+ import com.android.launcher3.states.StateAnimationConfig;
+ import com.android.launcher3.util.MultiValueAlpha;
+ import com.android.quickstep.views.MemInfoView;
++import com.android.quickstep.views.MidClearAllButton;
+ import com.android.quickstep.views.LauncherRecentsView;
+ import com.android.quickstep.views.RecentsView;
+ 
+@@ -91,6 +93,9 @@ public final class RecentsViewStateController extends
+         float memInfoAlpha = (state.getVisibleElements(mLauncher) & MEMINFO) != 0 ? 1 : 0;
+         propertySetter.setFloat(mLauncher.getMemInfoView(), MemInfoView.STATE_CTRL_ALPHA,
+                 memInfoAlpha, LINEAR);
++        float midClearAllButtonAlpha = (state.getVisibleElements(mLauncher) & MID_CLEAR_ALL_BUTTON) != 0 ? 1 : 0;
++        propertySetter.setFloat(mLauncher.getMidClearAllButton(), MidClearAllButton.STATE_CTRL_ALPHA,
++                midClearAllButtonAlpha, LINEAR);
+     }
+ 
+     @Override
+diff --git a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/BackgroundAppState.java b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/BackgroundAppState.java
+index 2fb6f3e5e..02f6c6238 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/BackgroundAppState.java
++++ b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/BackgroundAppState.java
+@@ -68,7 +68,7 @@ public class BackgroundAppState extends OverviewState {
+     @Override
+     public int getVisibleElements(Launcher launcher) {
+         return super.getVisibleElements(launcher)
+-                & ~OVERVIEW_BUTTONS & ~VERTICAL_SWIPE_INDICATOR & ~MEMINFO;
++                & ~OVERVIEW_BUTTONS & ~VERTICAL_SWIPE_INDICATOR & ~MID_CLEAR_ALL_BUTTON & ~MEMINFO;
+     }
+ 
+     @Override
+diff --git a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewModalTaskState.java b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewModalTaskState.java
+index 1a2dc605d..4e407921a 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewModalTaskState.java
++++ b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewModalTaskState.java
+@@ -44,7 +44,7 @@ public class OverviewModalTaskState extends OverviewState {
+ 
+     @Override
+     public int getVisibleElements(Launcher launcher) {
+-        return OVERVIEW_BUTTONS | MEMINFO;
++        return OVERVIEW_BUTTONS | MID_CLEAR_ALL_BUTTON | MEMINFO;
+     }
+ 
+     @Override
+diff --git a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewState.java b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewState.java
+index d4f146e02..a22268e9e 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewState.java
++++ b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/states/OverviewState.java
+@@ -131,14 +131,14 @@ public class OverviewState extends LauncherState {
+         RecentsView recentsView = launcher.getOverviewPanel();
+         if (ENABLE_OVERVIEW_ACTIONS.get() && removeShelfFromOverview(launcher) ||
+                 hideShelfInTwoButtonLandscape(launcher, recentsView.getPagedOrientationHandler())) {
+-            return OVERVIEW_BUTTONS | MEMINFO;
++            return OVERVIEW_BUTTONS | MID_CLEAR_ALL_BUTTON | MEMINFO;
+         } else if (launcher.getDeviceProfile().isVerticalBarLayout()) {
+-            return VERTICAL_SWIPE_INDICATOR | OVERVIEW_BUTTONS | MEMINFO;
++            return VERTICAL_SWIPE_INDICATOR | OVERVIEW_BUTTONS | MID_CLEAR_ALL_BUTTON | MEMINFO;
+         } else {
+             boolean hasAllAppsHeaderExtra = launcher.getAppsView() != null
+                     && launcher.getAppsView().getFloatingHeaderView().hasVisibleContent();
+             return HOTSEAT_SEARCH_BOX | VERTICAL_SWIPE_INDICATOR | OVERVIEW_BUTTONS
+-                    | (hasAllAppsHeaderExtra ? ALL_APPS_HEADER_EXTRA : HOTSEAT_ICONS | MEMINFO);
++                    | (hasAllAppsHeaderExtra ? ALL_APPS_HEADER_EXTRA : HOTSEAT_ICONS | MID_CLEAR_ALL_BUTTON | MEMINFO);
+         }
+     }
+ 
+diff --git a/quickstep/recents_ui_overrides/src/com/android/quickstep/RecentsActivity.java b/quickstep/recents_ui_overrides/src/com/android/quickstep/RecentsActivity.java
+index adf3fcff3..23ef471e7 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/quickstep/RecentsActivity.java
++++ b/quickstep/recents_ui_overrides/src/com/android/quickstep/RecentsActivity.java
+@@ -57,8 +57,10 @@ import com.android.quickstep.fallback.FallbackRecentsStateController;
+ import com.android.quickstep.fallback.FallbackRecentsView;
+ import com.android.quickstep.fallback.RecentsDragLayer;
+ import com.android.quickstep.fallback.RecentsState;
++import com.android.quickstep.SysUINavigationMode;
+ import com.android.quickstep.util.RecentsAtomicAnimationFactory;
+ import com.android.quickstep.views.MemInfoView;
++import com.android.quickstep.views.MidClearAllButton;
+ import com.android.quickstep.views.OverviewActionsView;
+ import com.android.quickstep.views.TaskView;
+ import com.android.systemui.shared.system.ActivityOptionsCompat;
+@@ -84,6 +86,7 @@ public final class RecentsActivity extends StatefulActivity<RecentsState> {
+     private FallbackRecentsView mFallbackRecentsView;
+     private OverviewActionsView mActionsView;
+     private MemInfoView mMemInfoView;
++    private MidClearAllButton mMidClearAllButton;
+ 
+     private Configuration mOldConfig;
+ 
+@@ -99,10 +102,14 @@ public final class RecentsActivity extends StatefulActivity<RecentsState> {
+         mFallbackRecentsView = findViewById(R.id.overview_panel);
+         mActionsView = findViewById(R.id.overview_actions_view);
+         mMemInfoView= findViewById(R.id.meminfo);
++        mMidClearAllButton = findViewById(R.id.mid_clear_all);
+ 
+         mDragLayer.recreateControllers();
+-        mFallbackRecentsView.init(mActionsView, mMemInfoView);
++        mFallbackRecentsView.init(mActionsView, mMemInfoView, mMidClearAllButton);
+         mMemInfoView.setDp(mDeviceProfile);
++        mMemInfoView.updateVerticalMargin(SysUINavigationMode.getMode(this));
++        mMidClearAllButton.setDp(mDeviceProfile);
++        mMidClearAllButton.updateVerticalMargin(SysUINavigationMode.getMode(this));
+     }
+ 
+     @Override
+@@ -165,6 +172,10 @@ public final class RecentsActivity extends StatefulActivity<RecentsState> {
+         return mMemInfoView;
+     }
+ 
++    public MidClearAllButton getMidClearAllButton() {
++        return mMidClearAllButton;
++    }
++
+     @Override
+     public void returnToHomescreen() {
+         super.returnToHomescreen();
+diff --git a/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/FallbackRecentsStateController.java b/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/FallbackRecentsStateController.java
+index c1a4c26f8..c4a46d96b 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/FallbackRecentsStateController.java
++++ b/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/FallbackRecentsStateController.java
+@@ -35,6 +35,7 @@ import com.android.launcher3.statemanager.StateManager.StateHandler;
+ import com.android.launcher3.states.StateAnimationConfig;
+ import com.android.launcher3.util.MultiValueAlpha;
+ import com.android.quickstep.views.MemInfoView;
++import com.android.quickstep.views.MidClearAllButton;
+ import com.android.quickstep.RecentsActivity;
+ 
+ /**
+@@ -88,8 +89,8 @@ public class FallbackRecentsStateController implements StateHandler<RecentsState
+                 config.getInterpolator(ANIM_OVERVIEW_TRANSLATE_X, LINEAR));
+         setter.setFloat(mRecentsView, TASK_SECONDARY_TRANSLATION, 0f,
+                 config.getInterpolator(ANIM_OVERVIEW_TRANSLATE_Y, LINEAR));
+-        setter.setFloat(mActivity.getMemInfoView(), MemInfoView.STATE_CTRL_ALPHA, state.hasMemInfoView() ? 1 : 0,
+-                config.getInterpolator(ANIM_OVERVIEW_SCALE, LINEAR));
++        setter.setFloat(mActivity.getMemInfoView(), MemInfoView.STATE_CTRL_ALPHA, state.hasMemInfoView() ? 1 : 0, LINEAR);
++        setter.setFloat(mActivity.getMidClearAllButton(), MidClearAllButton.STATE_CTRL_ALPHA, state.hasMidClearAll() ? 1 : 0, LINEAR);
+ 
+         setter.setFloat(mRecentsView, TASK_MODALNESS, state.getOverviewModalness(),
+                 config.getInterpolator(ANIM_OVERVIEW_MODAL, LINEAR));
+diff --git a/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/FallbackRecentsView.java b/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/FallbackRecentsView.java
+index 9475f936c..0dbe734f3 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/FallbackRecentsView.java
++++ b/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/FallbackRecentsView.java
+@@ -29,6 +29,7 @@ import com.android.launcher3.statemanager.StateManager.StateListener;
+ import com.android.quickstep.FallbackActivityInterface;
+ import com.android.quickstep.RecentsActivity;
+ import com.android.quickstep.views.MemInfoView;
++import com.android.quickstep.views.MidClearAllButton;
+ import com.android.quickstep.views.OverviewActionsView;
+ import com.android.quickstep.views.RecentsView;
+ import com.android.quickstep.views.TaskView;
+@@ -53,8 +54,8 @@ public class FallbackRecentsView extends RecentsView<RecentsActivity>
+     }
+ 
+     @Override
+-    public void init(OverviewActionsView actionsView, MemInfoView memInfoView) {
+-        super.init(actionsView, memInfoView);
++    public void init(OverviewActionsView actionsView, MemInfoView memInfoView, MidClearAllButton midClearAllButton) {
++        super.init(actionsView, memInfoView, midClearAllButton);
+         setOverviewStateEnabled(true);
+         setOverlayEnabled(true);
+     }
+diff --git a/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/RecentsState.java b/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/RecentsState.java
+index aa3104319..448935e9e 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/RecentsState.java
++++ b/quickstep/recents_ui_overrides/src/com/android/quickstep/fallback/RecentsState.java
+@@ -32,10 +32,11 @@ public class RecentsState implements BaseState<RecentsState> {
+     private static final int FLAG_HAS_BUTTONS = BaseState.getFlag(1);
+     private static final int FLAG_FULL_SCREEN = BaseState.getFlag(2);
+     private static final int FLAG_MEMINFO = BaseState.getFlag(3);
++    private static final int FLAG_MID_CLEAR_ALL_BUTTON = BaseState.getFlag(4);
+ 
+-    public static final RecentsState DEFAULT = new RecentsState(0, FLAG_HAS_BUTTONS | FLAG_MEMINFO);
++    public static final RecentsState DEFAULT = new RecentsState(0, FLAG_HAS_BUTTONS | FLAG_MID_CLEAR_ALL_BUTTON | FLAG_MEMINFO);
+     public static final RecentsState MODAL_TASK = new ModalState(1,
+-            FLAG_DISABLE_RESTORE | FLAG_HAS_BUTTONS | FLAG_MODAL | FLAG_MEMINFO);
++            FLAG_DISABLE_RESTORE | FLAG_HAS_BUTTONS | FLAG_MODAL | FLAG_MID_CLEAR_ALL_BUTTON | FLAG_MEMINFO);
+     public static final RecentsState BACKGROUND_APP = new BackgroundAppState(2,
+             FLAG_DISABLE_RESTORE | FLAG_NON_INTERACTIVE | FLAG_FULL_SCREEN);
+ 
+@@ -94,6 +95,13 @@ public class RecentsState implements BaseState<RecentsState> {
+         return hasFlag(FLAG_MEMINFO);
+     }
+ 
++    /**
++     * For this state, whether mid clear button should be shown.
++     */
++    public boolean hasMidClearAll() {
++        return hasFlag(FLAG_MID_CLEAR_ALL_BUTTON);
++    }
++
+     public float[] getOverviewScaleAndOffset(RecentsActivity activity) {
+         return new float[] { NO_SCALE, NO_OFFSET };
+     }
+diff --git a/quickstep/recents_ui_overrides/src/com/android/quickstep/views/LauncherRecentsView.java b/quickstep/recents_ui_overrides/src/com/android/quickstep/views/LauncherRecentsView.java
+index a9ad8d886..1de72ec3f 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/quickstep/views/LauncherRecentsView.java
++++ b/quickstep/recents_ui_overrides/src/com/android/quickstep/views/LauncherRecentsView.java
+@@ -99,8 +99,8 @@ public class LauncherRecentsView extends RecentsView<BaseQuickstepLauncher>
+     }
+ 
+     @Override
+-    public void init(OverviewActionsView actionsView, MemInfoView memInfoView) {
+-        super.init(actionsView, memInfoView);
++    public void init(OverviewActionsView actionsView, MemInfoView memInfoView, MidClearAllButton midClearAllButton) {
++        super.init(actionsView, memInfoView, midClearAllButton);
+         setContentAlpha(0);
+     }
+ 
+diff --git a/quickstep/recents_ui_overrides/src/com/android/quickstep/views/MidClearAllButton.java b/quickstep/recents_ui_overrides/src/com/android/quickstep/views/MidClearAllButton.java
+new file mode 100644
+index 000000000..9133a7ba3
+--- /dev/null
++++ b/quickstep/recents_ui_overrides/src/com/android/quickstep/views/MidClearAllButton.java
+@@ -0,0 +1,96 @@
++/*
++ * Copyright (C) 2022 Project Kaleidoscope
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.quickstep.views;
++
++import android.content.Context;
++import android.util.AttributeSet;
++import android.util.FloatProperty;
++import android.view.Gravity;
++import android.widget.Button;
++import android.widget.FrameLayout.LayoutParams;
++
++import com.android.launcher3.anim.AlphaUpdateListener;
++import com.android.launcher3.DeviceProfile;
++import com.android.launcher3.util.MultiValueAlpha;
++import com.android.quickstep.SysUINavigationMode.Mode;
++
++public class MidClearAllButton extends Button {
++
++    public static final int HIDDEN_DISABLED = 1 << 0;
++    public static final int HIDDEN_NO_TASKS = 1 << 1;
++
++    private static final int ALPHA_VISIBILITY = 0;
++    private static final int ALPHA_STATE_CTRL = 1;
++    public static final int ALPHA_FS_PROGRESS = 2;
++
++    public static final FloatProperty<MidClearAllButton> STATE_CTRL_ALPHA =
++            new FloatProperty<MidClearAllButton>("state control alpha") {
++                @Override
++                public Float get(MidClearAllButton view) {
++                    return view.getAlpha(ALPHA_STATE_CTRL);
++                }
++
++                @Override
++                public void setValue(MidClearAllButton view, float v) {
++                    view.setAlpha(ALPHA_STATE_CTRL, v);
++                }
++            };
++
++    private DeviceProfile mDp;
++    private int mHideReason;
++    private MultiValueAlpha mAlpha;
++
++    public MidClearAllButton(Context context, AttributeSet attrs) {
++        super(context, attrs);
++        mAlpha = new MultiValueAlpha(this, 3);
++        mAlpha.setUpdateVisibility(true);
++    }
++
++    public void setDp(DeviceProfile dp) {
++        mDp = dp;
++    }
++
++    public void setAlpha(int alphaType, float alpha) {
++        mAlpha.getProperty(alphaType).setValue(alpha);
++    }
++
++    public float getAlpha(int alphaType) {
++        return mAlpha.getProperty(alphaType).getValue();
++    }
++
++    public void hide(int hideReason, boolean hide) {
++        if (hide)
++            mHideReason |= hideReason;
++        else
++            mHideReason &= ~hideReason;
++
++        setAlpha(ALPHA_VISIBILITY, mHideReason == 0 ? 1 : 0);
++    }
++
++    public void updateVerticalMargin(Mode mode) {
++        LayoutParams lp = (LayoutParams)getLayoutParams();
++        int bottomMargin;
++
++        if (mode == Mode.THREE_BUTTONS)
++            bottomMargin = mDp.midClearAllMarginThreeButtonPx;
++        else
++            bottomMargin = mDp.midClearAllMarginGesturePx;
++
++        lp.setMargins(lp.leftMargin, lp.topMargin, lp.rightMargin, bottomMargin);
++        lp.gravity = Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM;
++    }
++}
+\ No newline at end of file
+diff --git a/quickstep/recents_ui_overrides/src/com/android/quickstep/views/RecentsView.java b/quickstep/recents_ui_overrides/src/com/android/quickstep/views/RecentsView.java
+index 07cab70bb..b35eb250d 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/quickstep/views/RecentsView.java
++++ b/quickstep/recents_ui_overrides/src/com/android/quickstep/views/RecentsView.java
+@@ -412,6 +412,7 @@ public abstract class RecentsView<T extends StatefulActivity> extends PagedView
+     private OverviewActionsView mActionsView;
+ 
+     private MemInfoView mMemInfoView;
++    private MidClearAllButton mMidClearAllButton;
+ 
+     private BaseActivity.MultiWindowModeChangedListener mMultiWindowModeChangedListener =
+             (inMultiWindowMode) -> {
+@@ -545,10 +546,14 @@ public abstract class RecentsView<T extends StatefulActivity> extends PagedView
+         loadVisibleTaskData();
+     }
+ 
+-    public void init(OverviewActionsView actionsView, MemInfoView memInfoView) {
++    public void init(OverviewActionsView actionsView, MemInfoView memInfoView, MidClearAllButton midClearAllButton) {
++        boolean noTask = getTaskViewCount() == 0;
+         mActionsView = actionsView;
+         mMemInfoView = memInfoView;
+-        mActionsView.updateHiddenFlags(HIDDEN_NO_TASKS, getTaskViewCount() == 0);
++        mActionsView.updateHiddenFlags(HIDDEN_NO_TASKS, noTask);
++        mMidClearAllButton = midClearAllButton;
++        midClearAllButton.setOnClickListener(this::dismissAllTasks);
++        midClearAllButton.hide(MidClearAllButton.HIDDEN_NO_TASKS, noTask);
+         mClearAllButton = (Button) mActionsView.findViewById(R.id.clear_all);
+         mClearAllButton.setOnClickListener(this::dismissAllTasks);
+     }
+@@ -595,9 +600,11 @@ public abstract class RecentsView<T extends StatefulActivity> extends PagedView
+         // Clear the task data for the removed child if it was visible
+         if (child instanceof TaskView) {
+             TaskView taskView = (TaskView) child;
++            boolean noTask = getTaskViewCount() == 0;
+             mHasVisibleTaskData.delete(taskView.getTask().key.id);
+             mTaskViewPool.recycle(taskView);
+-            mActionsView.updateHiddenFlags(HIDDEN_NO_TASKS, getTaskViewCount() == 0);
++            mActionsView.updateHiddenFlags(HIDDEN_NO_TASKS, noTask);
++            mMidClearAllButton.hide(MidClearAllButton.HIDDEN_NO_TASKS, noTask);
+         }
+         updateTaskStartIndex(child);
+     }
+@@ -611,6 +618,7 @@ public abstract class RecentsView<T extends StatefulActivity> extends PagedView
+         child.setLayoutDirection(mIsRtl ? View.LAYOUT_DIRECTION_LTR : View.LAYOUT_DIRECTION_RTL);
+         updateTaskStartIndex(child);
+         mActionsView.updateHiddenFlags(HIDDEN_NO_TASKS, false);
++        mMidClearAllButton.hide(MidClearAllButton.HIDDEN_NO_TASKS, false);
+         updateEmptyMessage();
+     }
+ 
+@@ -870,9 +878,9 @@ public abstract class RecentsView<T extends StatefulActivity> extends PagedView
+             getTaskViewAt(i).setFullscreenProgress(mFullscreenProgress);
+         }
+         // Fade out the actions view quickly (0.1 range)
+-        mActionsView.getFullscreenAlpha().setValue(
+-                mapToRange(fullscreenProgress, 0, 0.1f, 1f, 0f, LINEAR));
+         float alpha = mapToRange(fullscreenProgress, 0, 0.1f, 1f, 0f, LINEAR);
++        mActionsView.getFullscreenAlpha().setValue(alpha);
++        mMidClearAllButton.setAlpha(MidClearAllButton.ALPHA_FS_PROGRESS, alpha);
+         mMemInfoView.setAlpha(MemInfoView.ALPHA_FS_PROGRESS, alpha);
+     }
+ 
+diff --git a/quickstep/res/drawable/bg_ripple_circle.xml b/quickstep/res/drawable/bg_ripple_circle.xml
+new file mode 100644
+index 000000000..649ceec1d
+--- /dev/null
++++ b/quickstep/res/drawable/bg_ripple_circle.xml
+@@ -0,0 +1,7 @@
++<?xml version="1.0" encoding="utf-8"?>
++<ripple xmlns:android="http://schemas.android.com/apk/res/android"
++    android:color="@color/mid_clear_all_ripple_color">
++    <item>
++        <shape android:shape="oval" android:color="#FFFFFFFF"/>
++    </item>
++</ripple>
+\ No newline at end of file
+diff --git a/quickstep/res/drawable/ic_clear_all.xml b/quickstep/res/drawable/ic_clear_all.xml
+new file mode 100644
+index 000000000..543546bef
+--- /dev/null
++++ b/quickstep/res/drawable/ic_clear_all.xml
+@@ -0,0 +1,5 @@
++<vector android:height="@dimen/mid_clear_all_ic_size" android:tint="@color/mid_clear_all_foreground_color"
++    android:viewportHeight="24" android:viewportWidth="24"
++    android:width="@dimen/mid_clear_all_ic_size" xmlns:android="http://schemas.android.com/apk/res/android">
++    <path android:fillColor="@android:color/white" android:pathData="M5,13h14v-2L5,11v2zM3,17h14v-2L3,15v2zM7,7v2h14L21,7L7,7z"/>
++</vector>
+\ No newline at end of file
+diff --git a/quickstep/res/layout/mid_clear_all_button.xml b/quickstep/res/layout/mid_clear_all_button.xml
+new file mode 100644
+index 000000000..53e0e23a0
+--- /dev/null
++++ b/quickstep/res/layout/mid_clear_all_button.xml
+@@ -0,0 +1,10 @@
++<?xml version="1.0" encoding="utf-8"?>
++<com.android.quickstep.views.MidClearAllButton xmlns:android="http://schemas.android.com/apk/res/android"
++    android:id="@+id/mid_clear_all"
++    android:layout_width="@dimen/mid_clear_all_radius"
++    android:layout_height="@dimen/mid_clear_all_radius"
++    android:background="@drawable/bg_ripple_circle"
++    android:backgroundTint="@color/mid_clear_all_background_color"
++    android:foreground="@drawable/ic_clear_all"
++    android:foregroundGravity="center"
++    android:visibility="gone"/>
+\ No newline at end of file
+diff --git a/quickstep/res/values/colors.xml b/quickstep/res/values/colors.xml
+index 40da136ff..9d85c89ea 100644
+--- a/quickstep/res/values/colors.xml
++++ b/quickstep/res/values/colors.xml
+@@ -16,4 +16,8 @@
+ <resources>
+     <color name="back_arrow_color_light">#FFFFFFFF</color>
+     <color name="back_arrow_color_dark">#99000000</color>
++    <!-- Mid clear all button -->
++    <color name="mid_clear_all_background_color">#FFFFFF</color>
++    <color name="mid_clear_all_foreground_color">#000000</color>
++    <color name="mid_clear_all_ripple_color">#D0D0D0</color>
+ </resources>
+\ No newline at end of file
+diff --git a/quickstep/res/values/dimens.xml b/quickstep/res/values/dimens.xml
+index 8da63e5a2..68c10f229 100644
+--- a/quickstep/res/values/dimens.xml
++++ b/quickstep/res/values/dimens.xml
+@@ -102,4 +102,10 @@
+     <!-- Meminfo in overview -->
+     <dimen name="meminfo_bottom_margin_gesture">30dp</dimen>
+     <dimen name="meminfo_bottom_margin_three_button">10dp</dimen>
++
++    <!-- Mid clear all button -->
++    <dimen name="mid_clear_all_radius">60dp</dimen>
++    <dimen name="mid_clear_all_ic_size">24dp</dimen>
++    <dimen name="mid_clear_all_bottom_margin_gesture">70dp</dimen>
++    <dimen name="mid_clear_all_bottom_margin_three_button">40dp</dimen>
+ </resources>
+diff --git a/quickstep/src/com/android/launcher3/BaseQuickstepLauncher.java b/quickstep/src/com/android/launcher3/BaseQuickstepLauncher.java
+index bc3256dd8..a1b637965 100644
+--- a/quickstep/src/com/android/launcher3/BaseQuickstepLauncher.java
++++ b/quickstep/src/com/android/launcher3/BaseQuickstepLauncher.java
+@@ -52,6 +52,7 @@ import com.android.quickstep.util.RemoteAnimationProvider;
+ import com.android.quickstep.util.RemoteFadeOutAnimationListener;
+ import com.android.quickstep.util.ShelfPeekAnim;
+ import com.android.quickstep.views.MemInfoView;
++import com.android.quickstep.views.MidClearAllButton;
+ import com.android.quickstep.views.OverviewActionsView;
+ import com.android.quickstep.views.RecentsView;
+ import com.android.systemui.shared.system.ActivityManagerWrapper;
+@@ -79,6 +80,7 @@ public abstract class BaseQuickstepLauncher extends Launcher
+     private OverviewActionsView mActionsView;
+     protected HotseatPredictionController mHotseatPredictionController;
+     private MemInfoView mMemInfoView;
++    private MidClearAllButton mMidClearAllButton;
+ 
+     @Override
+     protected void onCreate(Bundle savedInstanceState) {
+@@ -103,6 +105,9 @@ public abstract class BaseQuickstepLauncher extends Launcher
+         if (mMemInfoView != null) {
+             mMemInfoView.updateVerticalMargin(newMode);
+         }
++        if (mMidClearAllButton != null) {
++            mMidClearAllButton.updateVerticalMargin(newMode);
++        }
+     }
+ 
+     @Override
+@@ -191,7 +196,8 @@ public abstract class BaseQuickstepLauncher extends Launcher
+         SysUINavigationMode.INSTANCE.get(this).updateMode();
+         mActionsView = findViewById(R.id.overview_actions_view);
+         mMemInfoView = findViewById(R.id.meminfo);
+-        ((RecentsView) getOverviewPanel()).init(mActionsView, mMemInfoView);
++        mMidClearAllButton = findViewById(R.id.mid_clear_all);
++        ((RecentsView) getOverviewPanel()).init(mActionsView, mMemInfoView, mMidClearAllButton);
+ 
+         if (isOverviewActionsEnabled()) {
+             // Overview is above all other launcher elements, including qsb, so move it to the top.
+@@ -199,8 +205,10 @@ public abstract class BaseQuickstepLauncher extends Launcher
+             mActionsView.bringToFront();
+             mMemInfoView.bringToFront();
+             mMemInfoView.setDp(getDeviceProfile());
++            mMidClearAllButton.setDp(getDeviceProfile());
+             mActionsView.updateVerticalMargin(SysUINavigationMode.getMode(this));
+             mMemInfoView.updateVerticalMargin(SysUINavigationMode.getMode(this));
++            mMidClearAllButton.updateVerticalMargin(SysUINavigationMode.getMode(this));
+         }
+     }
+ 
+@@ -216,6 +224,10 @@ public abstract class BaseQuickstepLauncher extends Launcher
+         return mMemInfoView;
+     }
+ 
++    public MidClearAllButton getMidClearAllButton () {
++        return mMidClearAllButton;
++    }
++
+     @Override
+     protected void closeOpenViews(boolean animate) {
+         super.closeOpenViews(animate);
+diff --git a/res/values-night-v26/colors.xml b/res/values-night-v26/colors.xml
+new file mode 100644
+index 000000000..3064bffb3
+--- /dev/null
++++ b/res/values-night-v26/colors.xml
+@@ -0,0 +1,6 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <!-- Mid clear all button -->
++    <color name="mid_clear_all_background_color">#353535</color>
++    <color name="mid_clear_all_foreground_color">#FFFFFF</color>
++</resources>
+\ No newline at end of file
+diff --git a/src/com/android/launcher3/DeviceProfile.java b/src/com/android/launcher3/DeviceProfile.java
+index 37c3490e7..ed09606b2 100644
+--- a/src/com/android/launcher3/DeviceProfile.java
++++ b/src/com/android/launcher3/DeviceProfile.java
+@@ -145,6 +145,10 @@ public class DeviceProfile {
+ 
+     private SharedPreferences mPrefs;
+ 
++    // Mid clear all button
++    public int midClearAllMarginGesturePx;
++    public int midClearAllMarginThreeButtonPx;
++
+     // Meminfo in overview
+     public int memInfoMarginGesturePx;
+     public int memInfoMarginThreeButtonPx;
+@@ -234,6 +238,11 @@ public class DeviceProfile {
+                 : (res.getDimensionPixelSize(R.dimen.dynamic_grid_hotseat_extra_vertical_size)
+                         + hotseatBarTopPaddingPx + hotseatBarBottomPaddingPx));
+ 
++        midClearAllMarginGesturePx = res.getDimensionPixelSize(
++                R.dimen.mid_clear_all_bottom_margin_gesture);
++        midClearAllMarginThreeButtonPx = res.getDimensionPixelSize(
++                R.dimen.mid_clear_all_bottom_margin_three_button);
++
+         memInfoMarginGesturePx = res.getDimensionPixelSize(
+                 R.dimen.meminfo_bottom_margin_gesture);
+         memInfoMarginThreeButtonPx = res.getDimensionPixelSize(
+diff --git a/src/com/android/launcher3/LauncherState.java b/src/com/android/launcher3/LauncherState.java
+index bc9b6f43d..4617379be 100644
+--- a/src/com/android/launcher3/LauncherState.java
++++ b/src/com/android/launcher3/LauncherState.java
+@@ -57,6 +57,7 @@ public abstract class LauncherState implements BaseState<LauncherState> {
+     public static final int ALL_APPS_CONTENT = 1 << 4;
+     public static final int VERTICAL_SWIPE_INDICATOR = 1 << 5;
+     public static final int OVERVIEW_BUTTONS = 1 << 6;
++    public static final int MID_CLEAR_ALL_BUTTON = 1 << 8;
+ 
+     /** Mask of all the items that are contained in the apps view. */
+     public static final int APPS_VIEW_ITEM_MASK =
+-- 
+2.25.1
+
