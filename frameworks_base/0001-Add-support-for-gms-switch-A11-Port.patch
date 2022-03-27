@@ -1,0 +1,365 @@
+From 78438f4e7c29c1c5d6b8e0f42fd9c51f09d8b6db Mon Sep 17 00:00:00 2001
+From: LibXZR <i@xzr.moe>
+Date: Sun, 27 Mar 2022 07:43:51 +0000
+Subject: [PATCH] Add support for gms switch - A11 Port This allows us to
+ enable or disable Google Mobile Services components by changing a single
+ setting. Also, it provides basic capability to fake gms installation status
+ that reports "not installed" rather than "disabled", because some apps will
+ show a notification when gms is disabled but stay quite when gms is totally
+ unavailable. Co-authored-by: TH779 <i@779.moe>
+
+Kang from https://github.com/Project-Kaleidoscope/android_frameworks_base/commit/7d0788335af901b50b03f6805647a32abd5e21d9
+
+Change-Id: I6caac2416bb01b40062c7755c19d5cfabdd1b28d
+---
+ core/java/android/provider/Settings.java      |   6 +
+ .../server/pm/PackageManagerService.java      |  13 +-
+ .../server/GmsManagerService.java             | 232 ++++++++++++++++++
+ .../java/com/android/server/SystemServer.java |   8 +
+ 4 files changed, 257 insertions(+), 2 deletions(-)
+ create mode 100644 services/core/java/ink/kaleidoscope/server/GmsManagerService.java
+
+diff --git a/core/java/android/provider/Settings.java b/core/java/android/provider/Settings.java
+index 341ff03daa52..56ed867c4835 100755
+--- a/core/java/android/provider/Settings.java
++++ b/core/java/android/provider/Settings.java
+@@ -6565,6 +6565,12 @@ public final class Settings {
+          */
+         public static final String ENABLED_INPUT_METHODS = "enabled_input_methods";
+ 
++        /**
++         * Control whether GMS is enabled for this user.
++         * @hide
++         */
++        public static final String GMS_ENABLED = "gms_enabled";
++
+         /**
+          * List of system input methods that are currently disabled.  This is a string
+          * containing the IDs of all disabled input methods, each ID separated
+diff --git a/services/core/java/com/android/server/pm/PackageManagerService.java b/services/core/java/com/android/server/pm/PackageManagerService.java
+index 55f315f05b52..0911f51fdeb2 100644
+--- a/services/core/java/com/android/server/pm/PackageManagerService.java
++++ b/services/core/java/com/android/server/pm/PackageManagerService.java
+@@ -384,6 +384,8 @@ import com.nvidia.NvAppProfileService;
+ import dalvik.system.CloseGuard;
+ import dalvik.system.VMRuntime;
+ 
++import ink.kaleidoscope.server.GmsManagerService;
++
+ import libcore.io.IoUtils;
+ import libcore.util.EmptyArray;
+ import libcore.util.HexEncoding;
+@@ -4587,6 +4589,9 @@ public class PackageManagerService extends IPackageManager.Stub
+ 
+     @Override
+     public PackageInfo getPackageInfo(String packageName, int flags, int userId) {
++        if (GmsManagerService.shouldHide(userId, packageName)){
++            return null;
++        }
+         return getPackageInfoInternal(packageName, PackageManager.VERSION_CODE_HIGHEST,
+                 flags, Binder.getCallingUid(), userId);
+     }
+@@ -5012,6 +5017,9 @@ public class PackageManagerService extends IPackageManager.Stub
+ 
+     @Override
+     public ApplicationInfo getApplicationInfo(String packageName, int flags, int userId) {
++        if (GmsManagerService.shouldHide(userId, packageName)){
++            return null;
++        }
+         return getApplicationInfoInternal(packageName, flags, Binder.getCallingUid(), userId);
+     }
+ 
+@@ -8696,7 +8704,7 @@ public class PackageManagerService extends IPackageManager.Stub
+                     list.addAll(mApexManager.getInactivePackages());
+                 }
+             }
+-            return new ParceledListSlice<>(list);
++            return GmsManagerService.recreatePackageList(userId, new ParceledListSlice<>(list));
+         }
+     }
+ 
+@@ -8775,7 +8783,8 @@ public class PackageManagerService extends IPackageManager.Stub
+     public ParceledListSlice<ApplicationInfo> getInstalledApplications(int flags, int userId) {
+         final int callingUid = Binder.getCallingUid();
+         return new ParceledListSlice<>(
+-                getInstalledApplicationsListInternal(flags, userId, callingUid));
++                GmsManagerService.recreateApplicationList(userId,
++                    getInstalledApplicationsListInternal(flags, userId, callingUid)));
+     }
+ 
+     private List<ApplicationInfo> getInstalledApplicationsListInternal(int flags, int userId,
+diff --git a/services/core/java/ink/kaleidoscope/server/GmsManagerService.java b/services/core/java/ink/kaleidoscope/server/GmsManagerService.java
+new file mode 100644
+index 000000000000..14427cd2ffb5
+--- /dev/null
++++ b/services/core/java/ink/kaleidoscope/server/GmsManagerService.java
+@@ -0,0 +1,232 @@
++/*
++ * Copyright (C) 2022 Project Kaleidoscope
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package ink.kaleidoscope.server;
++
++import static android.os.Process.THREAD_PRIORITY_DEFAULT;
++import static android.provider.Settings.Secure.GMS_ENABLED;
++
++import android.content.BroadcastReceiver;
++import android.content.ContentResolver;
++import android.content.Context;
++import android.content.Intent;
++import android.content.IntentFilter;
++import android.content.pm.ApplicationInfo;
++import android.content.pm.IPackageManager;
++import android.content.pm.PackageInfo;
++import android.content.pm.PackageManager;
++import android.content.pm.ParceledListSlice;
++import android.content.pm.UserInfo;
++import android.database.ContentObserver;
++import android.net.Uri;
++import android.os.Handler;
++import android.os.IUserManager;
++import android.os.RemoteException;
++import android.os.ServiceManager;
++import android.provider.Settings;
++
++import com.android.server.ServiceThread;
++import com.android.server.SystemService;
++
++import java.lang.Boolean;
++import java.lang.IllegalArgumentException;
++import java.lang.Integer;
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.HashMap;
++import java.util.List;
++
++public final class GmsManagerService extends SystemService {
++
++    private static final String[] GMS_PACKAGES =
++    {
++        "com.android.vending",
++        "com.google.android.gms",
++        "com.google.android.gms.policy_sidecar_aps",
++        "com.google.android.gsf",
++        "com.google.android.syncadapters.contacts"
++    };
++
++    private static final String TAG = "GmsManagerService";
++
++    private static HashMap<Integer, Boolean> sCachedSettings = new HashMap<>();
++
++    private final Context mContext;
++    private final IPackageManager mPM;
++    private final IUserManager mUM;
++    private final ContentResolver mResolver;
++    private final String mOpPackageName;
++
++    private ServiceThread mWorker;
++    private Handler mHandler;
++    private HashMap<Integer, SettingsObserver> mObservers;
++
++    public static boolean shouldHide(int userId, String packageName) {
++        if (packageName == null)
++            return false;
++
++        Boolean enabled = sCachedSettings.get(userId);
++        if (enabled == null)
++            return false;
++
++        return !enabled.booleanValue() &&
++                Arrays.stream(GMS_PACKAGES).anyMatch(packageName::equals);
++    }
++
++    public static ParceledListSlice<PackageInfo> recreatePackageList(
++                            int userId, ParceledListSlice<PackageInfo> list) {
++        Boolean enabled = sCachedSettings.get(userId);
++        if (enabled == null || enabled.booleanValue())
++            return list;
++
++        List<PackageInfo> oldList = list.getList();
++        ArrayList<PackageInfo> newList = new ArrayList<>();
++        for (PackageInfo info : oldList) {
++            if (info.packageName != null &&
++                    Arrays.stream(GMS_PACKAGES).anyMatch(info.packageName::equals))
++                continue;
++            newList.add(info);
++        }
++
++        return new ParceledListSlice<>(newList);
++    }
++
++    public static List<ApplicationInfo> recreateApplicationList(
++                            int userId, List<ApplicationInfo> list) {
++        Boolean enabled = sCachedSettings.get(userId);
++        if (enabled == null || enabled.booleanValue())
++            return list;
++
++        ArrayList<ApplicationInfo> newList = new ArrayList<>();
++        for (ApplicationInfo info : list) {
++            if (info.packageName != null &&
++                    Arrays.stream(GMS_PACKAGES).anyMatch(info.packageName::equals))
++                continue;
++            newList.add(info);
++        }
++
++        return newList;
++    }
++
++    private void updateStateForUser(int userId) {
++        boolean enabled = Settings.Secure.getIntForUser(mResolver, GMS_ENABLED, 0, userId) == 1;
++        sCachedSettings.put(userId, enabled);
++
++        try {
++            for (String packageName : GMS_PACKAGES) {
++                try {
++                    if (enabled) {
++                        mPM.setApplicationEnabledSetting(packageName,
++                                PackageManager.COMPONENT_ENABLED_STATE_DEFAULT,
++                                0, userId, mOpPackageName);
++                    } else {
++                        mPM.setApplicationEnabledSetting(packageName,
++                                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
++                                0, userId, mOpPackageName);
++                    }
++                } catch (IllegalArgumentException ignored) {}
++            }
++        } catch (RemoteException e) {
++            e.rethrowAsRuntimeException();
++        }
++    }
++
++    private void initForUser(int userId) {
++        if (userId < 0)
++            return;
++
++        SettingsObserver observer = new SettingsObserver(mHandler, userId);
++        mResolver.registerContentObserver(
++                Settings.Secure.getUriFor(GMS_ENABLED), false, observer, userId);
++        mObservers.put(userId, observer);
++
++        updateStateForUser(userId);
++    }
++
++    private void deInitForUser(int userId) {
++        if (userId < 0)
++            return;
++
++        SettingsObserver observer = mObservers.get(userId);
++        if (observer == null)
++            return;
++
++        mResolver.unregisterContentObserver(observer);
++        mObservers.remove(userId);
++        sCachedSettings.remove(userId);
++    }
++
++    private void init() {
++        try {
++            for (UserInfo user : mUM.getUsers(false, false, false)) {
++                initForUser(user.id);
++            }
++        } catch (RemoteException e) {
++            e.rethrowAsRuntimeException();
++        }
++
++        IntentFilter filter = new IntentFilter();
++        filter.addAction(Intent.ACTION_USER_ADDED);
++        filter.addAction(Intent.ACTION_USER_REMOVED);
++        mContext.registerReceiver(new UserReceiver(), filter,
++                android.Manifest.permission.MANAGE_USERS, mHandler);
++    }
++
++    @Override
++    public void onStart() {
++        mWorker = new ServiceThread(TAG, THREAD_PRIORITY_DEFAULT, false);
++        mWorker.start();
++        mHandler = new Handler(mWorker.getLooper());
++
++        init();
++    }
++
++    public GmsManagerService(Context context) {
++        super(context);
++        mContext = context;
++        mResolver = context.getContentResolver();
++        mPM = IPackageManager.Stub.asInterface(ServiceManager.getService("package"));
++        mUM = IUserManager.Stub.asInterface(ServiceManager.getService(Context.USER_SERVICE));
++        mOpPackageName = context.getOpPackageName();
++        mObservers = new HashMap<>();
++    }
++
++    private final class UserReceiver extends BroadcastReceiver {
++        @Override
++        public void onReceive(Context context, Intent intent) {
++            int userId = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, -1);
++
++            if (Intent.ACTION_USER_ADDED.equals(intent.getAction()))
++                initForUser(userId);
++            else
++                deInitForUser(userId);
++        }
++    }
++
++    private final class SettingsObserver extends ContentObserver {
++        private int mUserId;
++
++        public SettingsObserver(Handler handler, int userId) {
++            super(handler);
++            mUserId = userId;
++        }
++
++        @Override
++        public void onChange(boolean selfChange, Uri uri) {
++            updateStateForUser(mUserId);
++        }
++    }
++}
+\ No newline at end of file
+diff --git a/services/java/com/android/server/SystemServer.java b/services/java/com/android/server/SystemServer.java
+index 4622cfa48dc1..8e01a8875015 100644
+--- a/services/java/com/android/server/SystemServer.java
++++ b/services/java/com/android/server/SystemServer.java
+@@ -186,6 +186,8 @@ import dalvik.system.VMRuntime;
+ 
+ import com.google.android.startop.iorap.IorapForwardingService;
+ 
++import ink.kaleidoscope.server.GmsManagerService;
++
+ import java.io.File;
+ import java.io.IOException;
+ import java.lang.reflect.Constructor;
+@@ -317,6 +319,8 @@ public final class SystemServer {
+             "com.android.server.blob.BlobStoreManagerService";
+     private static final String ROLLBACK_MANAGER_SERVICE_CLASS =
+             "com.android.server.rollback.RollbackManagerService";
++    private static final String GMS_MANAGER_SERVICE_SERVICE_CLASS =
++            "ink.kaleidoscope.server.GmsManagerService";
+ 
+     private static final String TETHERING_CONNECTOR_CLASS = "android.net.ITetheringConnector";
+ 
+@@ -2258,6 +2262,10 @@ public final class SystemServer {
+         ConcurrentUtils.waitForFutureNoInterrupt(mBlobStoreServiceStart,
+                 START_BLOB_STORE_SERVICE);
+ 
++        t.traceBegin("StartGmsManagerService");
++        mSystemServiceManager.startService(GMS_MANAGER_SERVICE_SERVICE_CLASS);
++        t.traceEnd();
++
+         // These are needed to propagate to the runnable below.
+         final NetworkManagementService networkManagementF = networkManagement;
+         final NetworkStatsService networkStatsF = networkStats;
+-- 
+2.25.1
+
